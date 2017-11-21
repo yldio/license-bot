@@ -15,15 +15,15 @@
 package cmd
 
 import (
-	"fmt"
-	"text/tabwriter"
-	"os"
 	"context"
+	"fmt"
+	"os"
+	"text/tabwriter"
 
+	"github.com/google/go-github/github"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
 
@@ -47,7 +47,7 @@ to improve license conformance.
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		ts := oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken:accessToken},
+			&oauth2.Token{AccessToken: accessToken},
 		)
 		tc := oauth2.NewClient(ctx, ts)
 
@@ -70,7 +70,7 @@ to improve license conformance.
 			opt.Page = resp.NextPage
 		}
 
-		test := func (r *github.Repository) bool { return !*r.Fork }
+		test := func(r *github.Repository) bool { return !*r.Private && !*r.Fork }
 		var ret []*github.Repository
 		for _, repo := range allRepos {
 			if test(repo) {
@@ -78,18 +78,15 @@ to improve license conformance.
 			}
 		}
 
-		// if err != nil {
-		// } else {
-			w := tabwriter.NewWriter(os.Stdout, 2, 0, 5, ' ', 0)
-			for _, repo := range allRepos {
-				if repo.License != nil {
-					fmt.Fprintf(w, "%s\t%s\n", *repo.Name, *repo.License.SPDXID)
-				} else {
-					fmt.Fprintf(w, "%s\t%s\n", *repo.Name, "No License")
-				}
+		w := tabwriter.NewWriter(os.Stdout, 2, 0, 5, ' ', 0)
+		for _, repo := range ret {
+			if repo.License != nil {
+				fmt.Fprintf(w, "%s\t%s\n", *repo.Name, *repo.License.SPDXID)
+			} else {
+				fmt.Fprintf(w, "%s\t%s\n", *repo.Name, "No License")
 			}
-			w.Flush()
-		// }
+		}
+		w.Flush()
 	},
 }
 
