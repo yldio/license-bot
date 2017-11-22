@@ -17,19 +17,19 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"io"
-	"time"
+	"os"
 	"text/tabwriter"
+	"time"
 
 	"github.com/google/go-github/github"
 
 	"gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/storage/memory"
-	"gopkg.in/src-d/go-git.v4/plumbing/transport/http"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
-	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/config"
+	"gopkg.in/src-d/go-git.v4/plumbing"
+	"gopkg.in/src-d/go-git.v4/plumbing/object"
+	"gopkg.in/src-d/go-git.v4/plumbing/transport/http"
+	"gopkg.in/src-d/go-git.v4/storage/memory"
 
 	"gopkg.in/src-d/go-billy.v3/memfs"
 
@@ -94,7 +94,6 @@ to improve license conformance.
 				}
 			}
 		}
-		
 
 		w := tabwriter.NewWriter(os.Stdout, 2, 0, 5, ' ', 0)
 		for _, repo := range ret {
@@ -119,7 +118,7 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 	// Clones the repository into the worktree (fs) and storer all the .git
 	// content into the storer
 	r, _ := git.Clone(storer, fs, &git.CloneOptions{
-		URL: repo.GetCloneURL(),
+		URL:      repo.GetCloneURL(),
 		Progress: os.Stdout,
 	})
 
@@ -148,23 +147,23 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 	_, err = w.Commit("license: Adding MPL-2.0 License", &git.CommitOptions{
 		All: true,
 		Author: &object.Signature{
-			Name: "License Bot",
+			Name:  "License Bot",
 			Email: "open-source@yld.io",
-			When: time.Now(),
+			When:  time.Now(),
 		},
 	})
 	if err != nil {
 		fmt.Println(err)
 	}
 
-refs, _ := r.References()
-refs.ForEach(func(ref *plumbing.Reference) error {
-    if ref.Type() == plumbing.HashReference {
-        fmt.Println(ref)
-    }
+	refs, _ := r.References()
+	refs.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Type() == plumbing.HashReference {
+			fmt.Println(ref)
+		}
 
-    return nil
-})
+		return nil
+	})
 
 	ref, err := r.Branches()
 	fmt.Println(ref.Next())
@@ -175,9 +174,9 @@ refs.ForEach(func(ref *plumbing.Reference) error {
 
 	err = r.Push(&git.PushOptions{
 		RemoteName: "origin",
-		Auth: http.NewBasicAuth("tomgco-test", accessToken),
-		RefSpecs: []config.RefSpec{"refs/heads/branch:refs/heads/branch"},
-		Progress: os.Stdout,
+		Auth:       http.NewBasicAuth("tomgco-test", accessToken),
+		RefSpecs:   []config.RefSpec{"refs/heads/branch:refs/heads/branch"},
+		Progress:   os.Stdout,
 	})
 
 	if err != nil {
@@ -186,7 +185,7 @@ refs.ForEach(func(ref *plumbing.Reference) error {
 		fmt.Println("")
 	}
 
-// Output: Initial changelog
+	// Output: Initial changelog
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
