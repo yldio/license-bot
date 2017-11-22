@@ -18,9 +18,21 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"io"
+	"time"
 	"text/tabwriter"
 
 	"github.com/google/go-github/github"
+
+	"gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4/storage/memory"
+	"gopkg.in/src-d/go-git.v4/plumbing/transport/http"
+	"gopkg.in/src-d/go-git.v4/plumbing/object"
+	"gopkg.in/src-d/go-git.v4/plumbing"
+	"gopkg.in/src-d/go-git.v4/config"
+
+	"gopkg.in/src-d/go-billy.v3/memfs"
+
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -56,6 +68,7 @@ to improve license conformance.
 		opt := &github.RepositoryListByOrgOptions{
 			ListOptions: github.ListOptions{PerPage: 10},
 		}
+		githubLicense, _, _ := client.Licenses.Get(ctx, license)
 		var allRepos []*github.Repository
 		for {
 			repos, resp, err := client.Repositories.ListByOrg(ctx, org, opt)
@@ -74,20 +87,106 @@ to improve license conformance.
 		var ret []*github.Repository
 		for _, repo := range allRepos {
 			if test(repo) {
-				ret = append(ret, repo)
+				for _, b := range repo.Topics {
+					if b == "open-source-canidate" {
+						ret = append(ret, repo)
+					}
+				}
 			}
 		}
+		
 
 		w := tabwriter.NewWriter(os.Stdout, 2, 0, 5, ' ', 0)
 		for _, repo := range ret {
 			if repo.License != nil {
 				fmt.Fprintf(w, "%s\t%s\n", *repo.Name, *repo.License.SPDXID)
 			} else {
+				cloneRepo(repo, githubLicense)
 				fmt.Fprintf(w, "%s\t%s\n", *repo.Name, "No License")
 			}
 		}
 		w.Flush()
 	},
+}
+
+func cloneRepo(repo *github.Repository, githubLicense *github.License) {
+	// Filesystem abstraction based on memory
+	fs := memfs.New()
+
+	// Git objects storer based on memory
+	storer := memory.NewStorage()
+
+	// Clones the repository into the worktree (fs) and storer all the .git
+	// content into the storer
+	r, _ := git.Clone(storer, fs, &git.CloneOptions{
+		URL: repo.GetCloneURL(),
+		Progress: os.Stdout,
+	})
+
+	w, err := r.Worktree()
+
+	err = w.Checkout(&git.CheckoutOptions{
+		Create: true,
+		Branch: "refs/heads/branch",
+	})
+
+	fmt.Println(err)
+	stat, _ := fs.Stat(".git")
+	fmt.Println(stat)
+
+	_, err = fs.Stat("LICENSE")
+	if err == os.ErrNotExist {
+		file, _ := fs.Create("LICENSE")
+		io.WriteString(file, githubLicense.GetBody())
+		file.Close()
+	}
+
+	_, _ = w.Add("LICENSE")
+
+	// Prints the content of the CHANGELOG file from the cloned repository
+	// license, err := fs.Open("LICENSE")
+	_, err = w.Commit("license: Adding MPL-2.0 License", &git.CommitOptions{
+		All: true,
+		Author: &object.Signature{
+			Name: "License Bot",
+			Email: "open-source@yld.io",
+			When: time.Now(),
+		},
+	})
+	if err != nil {
+		fmt.Println(err)
+	}
+
+refs, _ := r.References()
+refs.ForEach(func(ref *plumbing.Reference) error {
+    if ref.Type() == plumbing.HashReference {
+        fmt.Println(ref)
+    }
+
+    return nil
+})
+
+	ref, err := r.Branches()
+	fmt.Println(ref.Next())
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(ref.Next())
+
+	err = r.Push(&git.PushOptions{
+		RemoteName: "origin",
+		Auth: http.NewBasicAuth("tomgco-test", accessToken),
+		RefSpecs: []config.RefSpec{"refs/heads/branch:refs/heads/branch"},
+		Progress: os.Stdout,
+	})
+
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println("")
+	}
+
+// Output: Initial changelog
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

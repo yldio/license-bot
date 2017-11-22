@@ -32,3 +32,15 @@
 [[constraint]]
   name = "github.com/spf13/viper"
   version = "1.0.0"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/oauth2"
+
+[[constraint]]
+  name = "gopkg.in/src-d/go-billy.v3"
+  version = "3.1.0"
+
+[[constraint]]
+  name = "gopkg.in/src-d/go-git.v4"
+  revision = "f9879dd043f84936a1f8acb8a53b74332a7ae135"
