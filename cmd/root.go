@@ -26,7 +26,6 @@ import (
 
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/config"
-	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"gopkg.in/src-d/go-git.v4/plumbing/transport/http"
 	"gopkg.in/src-d/go-git.v4/storage/memory"
@@ -42,6 +41,7 @@ import (
 var cfgFile string
 var org string
 var license string
+var user string
 var accessToken string
 
 // RootCmd represents the base command when called without any subcommands
@@ -100,7 +100,23 @@ to improve license conformance.
 			if repo.License != nil {
 				fmt.Fprintf(w, "%s\t%s\n", *repo.Name, *repo.License.SPDXID)
 			} else {
-				cloneRepo(repo, githubLicense)
+				fork, _, err := client.Repositories.CreateFork(ctx, org, *repo.Name, &github.RepositoryCreateForkOptions{})
+				forked, _, err := client.Repositories.Get(ctx, user, *repo.Name)
+				if err != nil {
+					fmt.Println("Fork Error:", err, fork, forked)
+				}
+				cloneRepo(forked, githubLicense)
+				title := "I have some licenses for you to use!"
+				head := fmt.Sprintf("%s:%s", user, "branch")
+				base := "master"
+				body := "Moar 🤖🤖🤖🤖"
+				pr := &github.NewPullRequest{
+					Title: &title,
+					Head: &head,
+					Base: &base,
+					Body: &body,
+				}
+				_, _, _ = client.PullRequests.Create(ctx, org, *repo.Name, pr)
 				fmt.Fprintf(w, "%s\t%s\n", *repo.Name, "No License")
 			}
 		}
@@ -129,10 +145,6 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 		Branch: "refs/heads/branch",
 	})
 
-	fmt.Println(err)
-	stat, _ := fs.Stat(".git")
-	fmt.Println(stat)
-
 	_, err = fs.Stat("LICENSE")
 	if err == os.ErrNotExist {
 		file, _ := fs.Create("LICENSE")
@@ -148,7 +160,7 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 		All: true,
 		Author: &object.Signature{
 			Name:  "License Bot",
-			Email: "open-source@yld.io",
+			Email: "tom+license-bot@yld.io",
 			When:  time.Now(),
 		},
 	})
@@ -156,36 +168,16 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 		fmt.Println(err)
 	}
 
-	refs, _ := r.References()
-	refs.ForEach(func(ref *plumbing.Reference) error {
-		if ref.Type() == plumbing.HashReference {
-			fmt.Println(ref)
-		}
-
-		return nil
-	})
-
-	ref, err := r.Branches()
-	fmt.Println(ref.Next())
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(ref.Next())
-
 	err = r.Push(&git.PushOptions{
 		RemoteName: "origin",
-		Auth:       http.NewBasicAuth("tomgco-test", accessToken),
+		Auth:       http.NewBasicAuth(user, accessToken),
 		RefSpecs:   []config.RefSpec{"refs/heads/branch:refs/heads/branch"},
 		Progress:   os.Stdout,
 	})
 
 	if err != nil {
-		fmt.Println(err)
-	} else {
-		fmt.Println("")
+		fmt.Println("Push Error:", err)
 	}
-
-	// Output: Initial changelog
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -210,6 +202,8 @@ func init() {
 	viper.BindPFlag("organisation", RootCmd.PersistentFlags().Lookup("organisation"))
 	RootCmd.PersistentFlags().StringVar(&license, "license", "MPL-2.0", "Name of the license to conform to, if left blank it will be assumed")
 	viper.BindPFlag("license", RootCmd.PersistentFlags().Lookup("license"))
+	RootCmd.PersistentFlags().StringVar(&user, "user", "yld-license-bot", "The name of your lovely bot")
+	viper.BindPFlag("user", RootCmd.PersistentFlags().Lookup("user"))
 }
 
 // initConfig reads in config file and ENV variables if set.
