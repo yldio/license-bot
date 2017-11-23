@@ -172,7 +172,6 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 		RemoteName: "origin",
 		Auth:       http.NewBasicAuth(user, accessToken),
 		RefSpecs:   []config.RefSpec{"refs/heads/branch:refs/heads/branch"},
-		Progress:   os.Stdout,
 	})
 
 	if err != nil {
