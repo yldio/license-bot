@@ -1,17 +1,3 @@
-// Copyright © 2017 NAME HERE <EMAIL ADDRESS>
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package cmd
 
 import (
@@ -150,6 +136,16 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 		file, _ := fs.Create("LICENSE")
 		io.WriteString(file, githubLicense.GetBody())
 		file.Close()
+
+		ref, _ := r.Head()
+		// ... retrieving the commit object
+		commit, _ := r.CommitObject(ref.Hash())
+		tree, _ := commit.Tree()
+		// ... get the files iterator and print the file
+		tree.Files().ForEach(func(f *object.File) error {
+			fmt.Printf("100644 blob %s    %s\n", f.Hash, f.Name)
+			return nil
+		})
 	}
 
 	_, _ = w.Add("LICENSE")
@@ -171,7 +167,7 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 	err = r.Push(&git.PushOptions{
 		RemoteName: "origin",
 		Auth:       http.NewBasicAuth(user, accessToken),
-		RefSpecs:   []config.RefSpec{"refs/heads/branch:refs/heads/branch"},
+		RefSpecs:   []config.RefSpec{"+refs/heads/branch:refs/heads/branch"},
 	})
 
 	if err != nil {
