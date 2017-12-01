@@ -7,14 +7,16 @@ import (
 	"os"
 	"text/tabwriter"
 	"time"
+	"path/filepath"
 
 	"github.com/google/go-github/github"
 
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/config"
+	// "gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"gopkg.in/src-d/go-git.v4/plumbing/transport/http"
-	"gopkg.in/src-d/go-git.v4/storage/memory"
+	"gopkg.in/src-d/go-git.v4/storage/filesystem"
 
 	"gopkg.in/src-d/go-billy.v3/memfs"
 
@@ -29,6 +31,12 @@ var org string
 var license string
 var user string
 var accessToken string
+var mpl = `// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+`
+var extensions = map[string]string{".go": mpl, ".js": mpl}
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -91,7 +99,7 @@ to improve license conformance.
 				if err != nil {
 					fmt.Println("Fork Error:", err, fork, forked)
 				}
-				cloneRepo(forked, githubLicense)
+				cloneRepo(repo, forked, githubLicense)
 				title := "I have some licenses for you to use!"
 				head := fmt.Sprintf("%s:%s", user, "branch")
 				base := "master"
@@ -110,26 +118,56 @@ to improve license conformance.
 	},
 }
 
-func cloneRepo(repo *github.Repository, githubLicense *github.License) {
-	// Filesystem abstraction based on memory
-	fs := memfs.New()
+func PrintErr(err error) {
+	if err != nil {
+		fmt.Println(err)
+	}
+}
 
-	// Git objects storer based on memory
-	storer := memory.NewStorage()
+func cloneRepo(src *github.Repository, repo *github.Repository, githubLicense *github.License) {
+	fs := memfs.New()
+	dot, err := fs.Chroot(".git")
+	PrintErr(err)
+	s, err := filesystem.NewStorage(dot)
 
 	// Clones the repository into the worktree (fs) and storer all the .git
 	// content into the storer
-	r, _ := git.Clone(storer, fs, &git.CloneOptions{
-		URL:      repo.GetCloneURL(),
+	r, _ := git.Clone(s, fs, &git.CloneOptions{
+		URL:      src.GetCloneURL(),
 		Progress: os.Stdout,
 	})
 
 	w, err := r.Worktree()
 
+	_, err = r.CreateRemote(&config.RemoteConfig{
+		Name: "upstream",
+		URLs: []string{repo.GetCloneURL()},
+	})
+
+	PrintErr(err)
+
+	err = r.Fetch(&git.FetchOptions{
+		RemoteName: "upstream",
+		Progress: os.Stdout,
+	})
+
+	PrintErr(err)
+
 	err = w.Checkout(&git.CheckoutOptions{
 		Create: true,
 		Branch: "refs/heads/branch",
 	})
+
+	PrintErr(err)
+
+	ref, err := r.Head()
+	PrintErr(err)
+	// ... retrieving the commit object
+	commit, err := r.CommitObject(ref.Hash())
+	fmt.Println(commit)
+	PrintErr(err)
+	tree, err := commit.Tree()
+	PrintErr(err)
 
 	_, err = fs.Stat("LICENSE")
 	if err == os.ErrNotExist {
@@ -137,18 +175,47 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 		io.WriteString(file, githubLicense.GetBody())
 		file.Close()
 
-		ref, _ := r.Head()
-		// ... retrieving the commit object
-		commit, _ := r.CommitObject(ref.Hash())
-		tree, _ := commit.Tree()
 		// ... get the files iterator and print the file
 		tree.Files().ForEach(func(f *object.File) error {
-			fmt.Printf("100644 blob %s    %s\n", f.Hash, f.Name)
+			if val, ok := extensions[filepath.Ext(f.Name)]; ok {
+				fmt.Printf("100644 blob %s    %s %s\n", f.Hash, f.Name, filepath.Ext(f.Name))
+				fs.Rename(f.Name, ".tmp")
+				input := []byte(val)
+				file, err := fs.OpenFile(f.Name, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				PrintErr(err)
+
+				file.Write(input)
+				tmp, err := fs.OpenFile(".tmp", os.O_RDWR, 0644)
+				PrintErr(err)
+
+				stat, err := fs.Stat(".tmp")
+				PrintErr(err)
+
+				b := make([]byte, stat.Size())
+				_, err = tmp.ReadAt(b, 0)
+				PrintErr(err)
+				file.Write(b)
+				file.Close()
+				tmp.Close()
+				// content, err := ioutil.ReadFile(f.Name)
+				// PrintErr(err)
+				// l := []byte(val)
+				// full := append(l, content...)
+				// fmt.Println(full)
+				// ioutil.WriteFile(f.Name, full, 0644)
+				PrintErr(err)
+			}
 			return nil
 		})
 	}
 
-	_, _ = w.Add("LICENSE")
+	status, err := w.Status()
+	PrintErr(err)
+	fmt.Println(status)
+
+	_, err = w.Add("LICENSE")
+
+	PrintErr(err)
 
 	// Prints the content of the CHANGELOG file from the cloned repository
 	// license, err := fs.Open("LICENSE")
@@ -160,12 +227,9 @@ func cloneRepo(repo *github.Repository, githubLicense *github.License) {
 			When:  time.Now(),
 		},
 	})
-	if err != nil {
-		fmt.Println(err)
-	}
 
 	err = r.Push(&git.PushOptions{
-		RemoteName: "origin",
+		RemoteName: "upstream",
 		Auth:       http.NewBasicAuth(user, accessToken),
 		RefSpecs:   []config.RefSpec{"+refs/heads/branch:refs/heads/branch"},
 	})
