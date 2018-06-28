@@ -82,7 +82,7 @@ to improve license conformance.
 		for _, repo := range allRepos {
 			if test(repo) {
 				for _, b := range repo.Topics {
-					if b == "open-source-canidate" {
+					if b == "open-source-candidate" {
 						ret = append(ret, repo)
 					}
 				}
